@@ -7,16 +7,20 @@ const SAMPLE_NOTES = [
     text: '',
   },
   {
-    label: 'Endodontic — Molar Root Canal (#14)',
-    text: 'Patient presented with severe spontaneous pain and lingering thermal sensitivity in tooth #14. Pulp vitality testing confirmed irreversible pulpitis. Periapical radiograph reveals periapical radiolucency at the mesial root apex. Performed pulpectomy under rubber dam isolation. Canals located, instrumented, and irrigated with NaOCl. Calcium hydroxide placed as intracanal medicament. Temporary filling placed with Cavit. Patient to return in 2 weeks for obturation. Recommended full-coverage crown following completion of endodontic therapy.',
+    label: 'Endodontic — Premolar Root Canal (#5)',
+    text: 'Patient presents with spontaneous, lingering thermal pain (8/10) in tooth #5. Cold test positive with pain lingering >30 seconds. EPT reading significantly reduced compared to adjacent teeth. Pre-operative periapical radiograph reveals deep carious lesion approaching the pulp chamber with periapical radiolucency at the apex, confirming diagnosis of irreversible pulpitis with symptomatic apical periodontitis. Tooth #5 is a premolar with standard two-canal anatomy confirmed on radiograph. Root canal therapy performed under rubber dam isolation. Access cavity prepared, two canals located (buccal and palatal). Working length established with electronic apex locator and confirmed with periapical radiograph. Canals cleaned and shaped using rotary NiTi files with copious NaOCl irrigation. Obturation completed with gutta percha and AH Plus sealer using warm vertical condensation. Post-operative periapical radiograph confirms adequate obturation to working length with no voids. Temporary restoration placed with Cavit. Patient advised to return for permanent restoration. No complications.',
+  },
+  {
+    label: 'Retreatment — Failed Prior Root Canal (#8)',
+    text: 'Patient referred for evaluation of persistent pain tooth #8, previously treated with root canal 3 years ago. Clinical exam reveals sinus tract on the buccal mucosa. CBCT scan shows missed MB2 canal and periapical pathology at apex. Previous obturation appears short of working length by 2mm. Treatment plan: endodontic retreatment of tooth #8. Removed existing gutta percha using ProTaper retreatment files. Located and negotiated missed MB2 canal. Working length confirmed with apex locator and radiograph. Canals re-instrumented and dressed with calcium hydroxide.',
+  },
+  {
+    label: 'General — Brief Clinical Note',
+    text: 'Patient came in with tooth pain. Examined the area and found decay. Did root canal. Placed a temporary filling. Patient to follow up.',
   },
   {
     label: 'Emergency — Palliative Treatment',
     text: 'Patient presents as emergency walk-in with acute throbbing pain in the lower right quadrant, 9/10 severity, waking patient from sleep. Tooth #30 exhibits large carious lesion with exposure of the pulp chamber. Percussion positive, cold test lingering >30 seconds. Prescribed Amoxicillin 500mg TID x 7 days. Performed palliative pulpotomy to relieve acute symptoms. Temporary sedative filling placed. Patient to return for definitive root canal therapy.',
-  },
-  {
-    label: 'Retreatment — Failed Prior Root Canal',
-    text: 'Patient referred for evaluation of persistent pain tooth #8, previously treated with root canal 3 years ago. Clinical exam reveals sinus tract on the buccal mucosa. CBCT scan shows missed MB2 canal and periapical pathology at apex. Previous obturation appears short of working length by 2mm. Treatment plan: endodontic retreatment of tooth #8. Removed existing gutta percha using ProTaper retreatment files. Located and negotiated missed MB2 canal. Working length confirmed with apex locator and radiograph. Canals re-instrumented and dressed with calcium hydroxide.',
   },
   {
     label: 'Surgical — Apicoectomy Anterior',
@@ -122,7 +126,7 @@ function App() {
   };
 
   const isReady = result?.status === 'Ready to File';
-  const isApproved = result?.adjudication_status === 'APPROVED';
+  const isApproved = isReady;
   const hasCrossCodes = result?.cross_codes &&
     ((result.cross_codes.CPT?.length > 0) || (result.cross_codes.ICD_10?.length > 0));
 
@@ -131,7 +135,7 @@ function App() {
       {/* ---- Header ---- */}
       <header className="app-header">
         <h1 className="header-logo-text">Claim Helper<span className="red-dot">.</span></h1>
-        <div className="header-tagline">AI-Powered Dental Billing Intelligence</div>
+        <div className="header-tagline">AI-Powered Dental Insurance Claim Analysis</div>
       </header>
 
       {/* ---- Main Content ---- */}
