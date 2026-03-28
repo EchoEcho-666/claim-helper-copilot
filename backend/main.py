@@ -86,59 +86,95 @@ def build_cdt_reference_block():
     return "\n".join(lines)
 
 
-class ClinicalNote(BaseModel):
+class ClaimRequest(BaseModel):
     text: str
+    insurance_company: str = "General"
 
 
 @app.post("/api/analyze-note")
-async def analyze_clinical_note(note: ClinicalNote):
+async def analyze_clinical_note(request: ClaimRequest):
     try:
-        # Mocking the PII scrubber for the MVP narrative
         print("SIMULATED STEP: Scrubbing PII (Names, DOBs) using Presidio-Analyzer before sending to LLM...")
 
         cdt_reference = build_cdt_reference_block()
 
-        system_prompt = f"""You are an expert dental billing specialist for endodontics.
-Analyze the following clinical note and extract the exact CDT codes that apply.
+        system_prompt = f"""You are Claim Helper, an autonomous Revenue Cycle Management (RCM) AI agent.
+You have master-level expertise in US dental and medical billing: ADA CDT coding, AMA CPT coding,
+WHO ICD-10-CM diagnostic coding, and commercial insurance adjudication algorithms.
+
+The patient's insurance company is: {{insurance_company}}
 
 {cdt_reference}
 
-For each code you suggest, provide:
-- A confidence_score (0-100) reflecting the likelihood this claim will be APPROVED by the insurance company. Factor in: whether the clinical note contains sufficient detail, whether medical necessity is clearly established, whether required documentation (radiographs, measurements, pre-authorization) is mentioned, and whether common insurance company denial triggers are addressed. Be conservative — only score above 90 if the documentation is truly bulletproof.
-- Step-by-step reasoning explaining why the code applies AND any documentation gaps
-- Any denial risk factors specific to this case
+INSTRUCTIONS — execute each step systematically:
 
-Respond ONLY in valid JSON with this structure:
-{{
+STEP 1: CDT Code Extraction
+Analyze the clinical note and identify the correct CDT codes from the reference list above.
+For each code, estimate the fee based on the reference data.
+
+STEP 2: Cross-Coding (Medical Codes)
+If the procedure has medical implications (surgery, trauma, pathology, complex diagnosis),
+identify the corresponding CPT and ICD-10-CM codes that would be needed to bill medical insurance.
+Return empty lists if cross-coding does not apply.
+
+STEP 3: Predictive Denial Risk Analysis
+Act as an adversarial insurance company algorithm. Try to find reasons to deny this claim:
+- CO-50 (Medical Necessity): Does the note fail to justify why the procedure was essential?
+- CO-11 (Code Mismatch): Is there a logical gap between the diagnosis and the procedure?
+- CO-16 (Missing Info): Is required documentation missing (radiographs, measurements, tooth numbers)?
+Set adjudication_status to "HIGH_DENIAL_RISK" if any serious risk is found, otherwise "APPROVED".
+
+STEP 4: Medical Necessity Narrative
+If the claim is viable but needs a narrative to survive insurance scrutiny, generate a concise,
+clinical medical necessity statement. Use specific clinical data from the note (probing depths,
+percentages, radiographic findings). Match the tone of a specialist writing to a peer medical director.
+Return null if no narrative is needed.
+
+STEP 5: Confidence Scoring
+Score each code 0-100 on likelihood of insurance approval. Factor in documentation completeness,
+medical necessity language, and common denial triggers. Be conservative — only score above 90
+if the documentation is truly bulletproof for {request.insurance_company}.
+
+OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
+{{{{
+    "adjudication_status": "APPROVED or HIGH_DENIAL_RISK",
+    "denial_risk_code": null or "CO-50" or "CO-11" or "CO-16",
     "suggested_codes": [
-        {{
+        {{{{
             "code": "D3330",
             "description": "Root canal - molar",
             "fee_estimate": 950,
-            "confidence_score": 95,
-            "reasoning": "Step-by-step explanation of why this code was chosen."
-        }}
+            "confidence_score": 85,
+            "reasoning": "Step-by-step explanation"
+        }}}}
     ],
+    "cross_codes": {{{{
+        "CPT": [],
+        "ICD_10": []
+    }}}},
     "total_estimated_value": 950,
-    "denial_risks": ["List any missing info that could trigger a denial"],
-    "status": "Ready to File"
-}}
+    "denial_risks": ["specific risks found"],
+    "medical_necessity_narrative": "clinical narrative or null",
+    "status": "Ready to File or Clarification Needed"
+}}}}"""
 
-Set status to "Clarification Needed" if any confidence_score is below 85."""
+        user_input = json.dumps({
+            "insurance_company": request.insurance_company,
+            "clinical_note": request.text
+        })
 
         body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1500,
+            "max_tokens": 2000,
             "system": system_prompt,
             "messages": [
                 {
                     "role": "user",
-                    "content": f"Here is the clinical note:\n\n{note.text}"
+                    "content": user_input
                 }
             ]
         })
 
-        # Calling Claude on Bedrock
         response = bedrock_runtime.invoke_model(
             modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
             contentType='application/json',
@@ -149,7 +185,7 @@ Set status to "Clarification Needed" if any confidence_score is below 85."""
         response_body = json.loads(response.get('body').read())
         ai_response_text = response_body['content'][0]['text']
 
-        # Strip markdown code fences if Claude wraps the JSON in ```json ... ```
+        # Strip markdown code fences if present
         cleaned = ai_response_text.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1]
@@ -158,7 +194,7 @@ Set status to "Clarification Needed" if any confidence_score is below 85."""
         result = json.loads(cleaned)
 
         # Cross-reference AI output against CDT dataset
-        result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []), note.text)
+        result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []), request.text)
 
         # Recalculate status based on adjusted confidence scores
         min_confidence = min(
@@ -166,6 +202,8 @@ Set status to "Clarification Needed" if any confidence_score is below 85."""
             default=100
         )
         if min_confidence < 85:
+            result["status"] = "Clarification Needed"
+        if result.get("adjudication_status") == "HIGH_DENIAL_RISK":
             result["status"] = "Clarification Needed"
 
         return result

@@ -24,14 +24,27 @@ const SAMPLE_NOTES = [
   },
 ];
 
+const INSURANCE_COMPANIES = [
+  'Delta Dental',
+  'Aetna Dental',
+  'UnitedHealthcare',
+  'Cigna Dental',
+  'MetLife',
+  'Blue Cross Blue Shield',
+  'Guardian',
+  'Humana',
+];
+
 function App() {
   const [note, setNote] = useState(SAMPLE_NOTES[1].text);
   const [selectedSample, setSelectedSample] = useState(1);
+  const [insuranceCompany, setInsuranceCompany] = useState('Delta Dental');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loadingStep, setLoadingStep] = useState(0);
   const [expandedReasoning, setExpandedReasoning] = useState({});
+  const [copySuccess, setCopySuccess] = useState(false);
   const loadingInterval = useRef(null);
 
   const handleSampleChange = (e) => {
@@ -48,8 +61,8 @@ function App() {
     setResult(null);
     setLoadingStep(0);
     setExpandedReasoning({});
+    setCopySuccess(false);
 
-    // Animate loading steps
     let step = 0;
     loadingInterval.current = setInterval(() => {
       step++;
@@ -61,7 +74,10 @@ function App() {
       const response = await fetch('http://127.0.0.1:8000/api/analyze-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: note }),
+        body: JSON.stringify({
+          text: note,
+          insurance_company: insuranceCompany,
+        }),
       });
 
       if (!response.ok) {
@@ -72,7 +88,6 @@ function App() {
       const data = await response.json();
       clearInterval(loadingInterval.current);
       setLoadingStep(4);
-      // Small delay so "Done" step renders before results appear
       setTimeout(() => setResult(data), 300);
     } catch (err) {
       clearInterval(loadingInterval.current);
@@ -98,8 +113,18 @@ function App() {
     setExpandedReasoning(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
+  const copyNarrative = () => {
+    if (result?.medical_necessity_narrative) {
+      navigator.clipboard.writeText(result.medical_necessity_narrative);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  };
+
   const isReady = result?.status === 'Ready to File';
-  const isClarification = result?.status === 'Clarification Needed';
+  const isApproved = result?.adjudication_status === 'APPROVED';
+  const hasCrossCodes = result?.cross_codes &&
+    ((result.cross_codes.CPT?.length > 0) || (result.cross_codes.ICD_10?.length > 0));
 
   return (
     <div>
@@ -120,6 +145,18 @@ function App() {
               <span style={{ fontSize: '12px', color: '#94a3b8' }}>Paste or select a sample</span>
             </div>
             <div className="card-body">
+              <label className="input-label">Insurance Company</label>
+              <select
+                className="insurance-select"
+                value={insuranceCompany}
+                onChange={(e) => setInsuranceCompany(e.target.value)}
+              >
+                {INSURANCE_COMPANIES.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+
+              <label className="input-label">Sample Notes</label>
               <select
                 className="sample-select"
                 value={selectedSample}
@@ -148,7 +185,7 @@ function App() {
                     Analyzing...
                   </>
                 ) : (
-                  'Generate Billing Codes'
+                  'Analyze Claim'
                 )}
               </button>
 
@@ -161,7 +198,7 @@ function App() {
             <div className="card-header">
               <h3>AI Billing Output</h3>
               {result && (
-                <span className={`status-badge ${isReady ? 'ready' : isClarification ? 'clarification' : 'clarification'}`}>
+                <span className={`status-badge ${isReady ? 'ready' : 'clarification'}`}>
                   {result.status}
                 </span>
               )}
@@ -180,7 +217,7 @@ function App() {
                       <polyline points="10 9 9 9 8 9" />
                     </svg>
                   </div>
-                  <p>Paste a clinical note and click <strong>Generate Billing Codes</strong> to get AI-powered CDT code suggestions with confidence scoring and denial risk analysis.</p>
+                  <p>Select an insurance company, paste a clinical note, and click <strong>Analyze Claim</strong> to get AI-powered billing codes, cross-coding, denial risk prediction, and a medical necessity narrative.</p>
                 </div>
               )}
 
@@ -193,7 +230,7 @@ function App() {
                       'Scrubbing PII from clinical text',
                       'Matching against CDT code database',
                       'Running predictive adjudication',
-                      'Generating results',
+                      'Generating narrative & cross-codes',
                     ].map((label, i) => (
                       <div key={i} className={`loading-step ${loadingStep > i ? 'done' : loadingStep === i ? 'active' : ''}`}>
                         <span className="step-dot" />
@@ -208,6 +245,14 @@ function App() {
               {/* Results */}
               {result && !loading && (
                 <div>
+                  {/* Adjudication banner */}
+                  <div className={`adjudication-banner ${isApproved ? 'approved' : 'high-risk'}`}>
+                    <span>{isApproved ? 'Likely Approved' : 'High Denial Risk'}</span>
+                    {result.denial_risk_code && (
+                      <span className="denial-code-badge">{result.denial_risk_code}</span>
+                    )}
+                  </div>
+
                   {/* Total value */}
                   <div className="result-header">
                     <div>
@@ -222,7 +267,26 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Code cards */}
+                  {/* Cross-codes (CPT + ICD-10) */}
+                  {hasCrossCodes && (
+                    <div className="cross-codes-section animate-in">
+                      <div className="cross-codes-title">Medical Cross-Codes</div>
+                      <div className="code-pills">
+                        {result.cross_codes.CPT?.map((code) => (
+                          <span key={code} className="code-pill cpt">
+                            {code}<span className="code-pill-label"> CPT</span>
+                          </span>
+                        ))}
+                        {result.cross_codes.ICD_10?.map((code) => (
+                          <span key={code} className="code-pill icd">
+                            {code}<span className="code-pill-label"> ICD-10</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CDT Code cards */}
                   {result.suggested_codes?.map((item, index) => (
                     <div key={index} className="code-card animate-in">
                       <div className="code-card-header">
@@ -289,6 +353,21 @@ function App() {
                       )}
                     </div>
                   ))}
+
+                  {/* Medical Necessity Narrative */}
+                  {result.medical_necessity_narrative && (
+                    <div className="narrative-section animate-in">
+                      <div className="narrative-header">
+                        <span className="narrative-title">Medical Necessity Narrative</span>
+                        <button className="copy-btn" onClick={copyNarrative}>
+                          {copySuccess ? 'Copied!' : 'Copy to Clipboard'}
+                        </button>
+                      </div>
+                      <div className="narrative-body">
+                        "{result.medical_necessity_narrative}"
+                      </div>
+                    </div>
+                  )}
 
                   {/* Global denial risks */}
                   {result.denial_risks?.length > 0 && (

@@ -184,8 +184,11 @@ This approach demonstrates:
 
 ## Roadmap (Next from Blueprint)
 
-- [ ] **Gold Standard system prompt** — cross-coding (CDT + CPT + ICD-10), predictive adjudication (CO-50/CO-11/CO-16), autonomous medical necessity narrative generation
-- [ ] **Insurance company selection** — dropdown for insurance carrier (Delta Dental, Aetna, etc.) to enable carrier-specific denial prediction
-- [ ] **Medical necessity narrative output** — auto-generated clinical narrative attachable to claim forms
+- [x] **Gold Standard system prompt** — cross-coding (CDT + CPT + ICD-10), predictive adjudication (CO-50/CO-11/CO-16), autonomous medical necessity narrative generation
+- [x] **Insurance company selection** — dropdown for insurance carrier (Delta Dental, Aetna, etc.) to enable carrier-specific denial prediction
+- [x] **Medical necessity narrative output** — auto-generated clinical narrative with copy-to-clipboard, attachable to claim forms
+- [x] **Adjudication status** — "Likely Approved" / "High Denial Risk" banner with specific denial code (CO-50/CO-11/CO-16)
+- [x] **Medical cross-codes** — CPT and ICD-10 code pills displayed when cross-coding applies
 - [ ] **RAG pipeline** — vector database loaded with insurance company policy manuals for grounded adjudication
 - [ ] **Agentic tool use** — deterministic validation functions (e.g., `verify_ICD10_compatibility`)
+- [ ] **Clearinghouse integration** — direct submission to DentalXChange/Change Healthcare
