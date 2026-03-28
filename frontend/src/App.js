@@ -32,6 +32,12 @@ function App() {
     }
   };
 
+  const getConfidenceColor = (score) => {
+    if (score >= 85) return '#2ecc71';
+    if (score >= 60) return '#f39c12';
+    return '#e74c3c';
+  };
+
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', padding: '40px', maxWidth: '1200px', margin: '0 auto' }}>
       <header style={{ borderBottom: '2px solid #eee', paddingBottom: '20px', marginBottom: '30px' }}>
@@ -49,7 +55,7 @@ function App() {
             style={{ width: '100%', height: '300px', padding: '15px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' }}
             placeholder="Paste messy clinical notes here..."
           />
-          <button 
+          <button
             onClick={analyzeNote}
             disabled={loading}
             style={{ marginTop: '20px', padding: '15px 30px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: loading ? 'not-allowed' : 'pointer', width: '100%', fontWeight: 'bold' }}
@@ -62,7 +68,7 @@ function App() {
         {/* Right Column: Output */}
         <div style={{ flex: 1, backgroundColor: '#f8f9fa', padding: '30px', borderRadius: '8px', border: '1px solid #eee' }}>
           <h3 style={{ marginTop: 0 }}>AI Billing Output</h3>
-          
+
           {!result && !loading && (
             <p style={{ color: '#95a5a6', fontStyle: 'italic' }}>Waiting for clinical notes...</p>
           )}
@@ -81,20 +87,85 @@ function App() {
               </div>
 
               <h4>Suggested Codes</h4>
-              <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {result.suggested_codes.map((codeItem, index) => (
-                  <li key={index} style={{ backgroundColor: 'white', padding: '15px', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+              {result.suggested_codes.map((item, index) => (
+                <div key={index} style={{ backgroundColor: 'white', padding: '15px', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '12px' }}>
+                  {/* Code header row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <div>
-                      <strong>{codeItem.code}</strong> - {codeItem.description}
+                      <strong>{item.code}</strong> — {item.description}
+                      {item.verified && (
+                        <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#d5f5e3', color: '#27ae60', fontSize: '12px', fontWeight: 'bold' }}>
+                          CDT Verified
+                        </span>
+                      )}
+                      {item.verified === false && (
+                        <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#fdebd0', color: '#e67e22', fontSize: '12px', fontWeight: 'bold' }}>
+                          Unverified
+                        </span>
+                      )}
                     </div>
-                    <div style={{ color: '#27ae60', fontWeight: 'bold' }}>${codeItem.fee_estimate}</div>
-                  </li>
-                ))}
-              </ul>
+                    <div style={{ color: '#27ae60', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                      ${item.fee_estimate}
+                      {item.reference_fee && item.reference_fee !== item.fee_estimate && (
+                        <span style={{ color: '#95a5a6', fontWeight: 'normal', fontSize: '12px', marginLeft: '4px' }}>
+                          (ref: ${item.reference_fee})
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
+                  {/* Category */}
+                  {item.category && item.category !== 'Unknown' && (
+                    <div style={{ fontSize: '12px', color: '#7f8c8d', marginBottom: '8px' }}>{item.category}</div>
+                  )}
+
+                  {/* Confidence bar */}
+                  {item.confidence_score != null && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '13px', color: '#555', minWidth: '80px' }}>Confidence:</span>
+                        <div style={{ flex: 1, backgroundColor: '#ecf0f1', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${item.confidence_score}%`,
+                            height: '100%',
+                            backgroundColor: getConfidenceColor(item.confidence_score),
+                            borderRadius: '4px',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: getConfidenceColor(item.confidence_score), minWidth: '36px' }}>
+                          {item.confidence_score}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Denial risk factors */}
+                  {item.denial_risk_factors && item.denial_risk_factors.length > 0 && (
+                    <div style={{ backgroundColor: '#fdf3f2', padding: '8px 12px', borderRadius: '4px', borderLeft: '3px solid #e74c3c', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#c0392b', marginBottom: '4px' }}>Denial Risk Factors</div>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#c0392b' }}>
+                        {item.denial_risk_factors.map((risk, i) => (
+                          <li key={i}>{risk}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Reasoning (expandable) */}
+                  {item.reasoning && (
+                    <details style={{ fontSize: '13px', color: '#555' }}>
+                      <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#3498db' }}>AI Reasoning</summary>
+                      <p style={{ margin: '6px 0 0 0', lineHeight: '1.5' }}>{item.reasoning}</p>
+                    </details>
+                  )}
+                </div>
+              ))}
+
+              {/* Global denial risks */}
               {result.denial_risks && result.denial_risks.length > 0 && (
-                <div style={{ marginTop: '30px', backgroundColor: '#fdf3f2', padding: '15px', borderRadius: '6px', borderLeft: '4px solid #e74c3c' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#c0392b' }}>⚠️ Insurance Denial Risks</h4>
+                <div style={{ marginTop: '20px', backgroundColor: '#fdf3f2', padding: '15px', borderRadius: '6px', borderLeft: '4px solid #e74c3c' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#c0392b' }}>Insurance Denial Risks</h4>
                   <ul style={{ margin: 0, paddingLeft: '20px', color: '#c0392b' }}>
                     {result.denial_risks.map((risk, index) => (
                       <li key={index}>{risk}</li>

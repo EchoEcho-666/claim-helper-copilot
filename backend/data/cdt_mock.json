@@ -1,0 +1,111 @@
+{
+  "cdt_version": "2024-prototype-mock",
+  "disclaimer": "Educational mock data only. Production requires ADA CDT license: https://www.ada.org/publications/cdt",
+  "codes": [
+    {
+      "code": "D0140",
+      "category": "Diagnostic",
+      "description": "Limited oral evaluation – problem focused",
+      "typical_fee": 75,
+      "denial_risk_factors": ["missing narrative for complex cases"]
+    },
+    {
+      "code": "D0220",
+      "category": "Diagnostic Imaging",
+      "description": "Intraoral – periapical first radiographic image",
+      "typical_fee": 45,
+      "denial_risk_factors": ["exceeds frequency limits per payer"]
+    },
+    {
+      "code": "D0364",
+      "category": "Diagnostic Imaging",
+      "description": "Cone beam CT capture and interpretation with limited field of view",
+      "typical_fee": 250,
+      "denial_risk_factors": ["requires pre-authorization", "medical necessity documentation"]
+    },
+    {
+      "code": "D3221",
+      "category": "Endodontics",
+      "description": "Pulpal debridement, primary and permanent teeth",
+      "typical_fee": 180,
+      "denial_risk_factors": ["not payable if definitive RCT done same day"]
+    },
+    {
+      "code": "D3310",
+      "category": "Endodontics",
+      "description": "Endodontic therapy, anterior tooth (excluding final restoration)",
+      "typical_fee": 650,
+      "denial_risk_factors": ["missing pre-op radiograph", "tooth notation mismatch"]
+    },
+    {
+      "code": "D3320",
+      "category": "Endodontics",
+      "description": "Endodontic therapy, premolar tooth (excluding final restoration)",
+      "typical_fee": 750,
+      "denial_risk_factors": ["missing pre-op radiograph", "tooth notation mismatch"]
+    },
+    {
+      "code": "D3330",
+      "category": "Endodontics",
+      "description": "Endodontic therapy, molar tooth (excluding final restoration)",
+      "typical_fee": 950,
+      "denial_risk_factors": ["missing pre-op radiograph", "tooth notation mismatch", "requires narrative for complex anatomy"]
+    },
+    {
+      "code": "D3346",
+      "category": "Endodontics",
+      "description": "Retreatment of previous root canal therapy – anterior",
+      "typical_fee": 700,
+      "denial_risk_factors": ["requires documentation of failure reason"]
+    },
+    {
+      "code": "D3348",
+      "category": "Endodontics",
+      "description": "Retreatment of previous root canal therapy – molar",
+      "typical_fee": 1100,
+      "denial_risk_factors": ["requires documentation of failure reason"]
+    },
+    {
+      "code": "D3410",
+      "category": "Endodontics",
+      "description": "Apicoectomy – anterior",
+      "typical_fee": 850,
+      "denial_risk_factors": ["often requires medical claim first", "pre-auth needed"]
+    },
+    {
+      "code": "D3425",
+      "category": "Endodontics",
+      "description": "Apicoectomy – molar (first root)",
+      "typical_fee": 1050,
+      "denial_risk_factors": ["often requires medical claim first", "pre-auth needed"]
+    },
+    {
+      "code": "D3910",
+      "category": "Adjunctive",
+      "description": "Surgical procedure for isolation of tooth with rubber dam",
+      "typical_fee": 35,
+      "denial_risk_factors": ["bundled with some RCT codes per payer"]
+    },
+    {
+      "code": "D2950",
+      "category": "Restorative",
+      "description": "Core buildup, including any pins",
+      "typical_fee": 225,
+      "denial_risk_factors": ["requires documentation of insufficient tooth structure"]
+    },
+    {
+      "code": "D2391",
+      "category": "Restorative",
+      "description": "Resin-based composite – one surface, posterior",
+      "typical_fee": 175,
+      "denial_risk_factors": ["material documentation", "tooth surface notation"]
+    },
+    {
+      "code": "D9110",
+      "category": "Adjunctive",
+      "description": "Palliative (emergency) treatment of dental pain – minor procedure",
+      "typical_fee": 95,
+      "denial_risk_factors": ["frequency limits", "requires acute symptom documentation"]
+    }
+  ]
+}

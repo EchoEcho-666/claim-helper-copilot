@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import boto3
 import json
 import os
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Load environment variables from .env
@@ -11,45 +12,106 @@ load_dotenv()
 
 app = FastAPI(title="TDO Claim Copilot API")
 
-# Allow React frontend to communicate with this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for local development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize AWS Bedrock Client
-# It automatically picks up the credentials from your .env file
+# Boto3 automatically uses the keys in your .env file
 bedrock_runtime = boto3.client(
     service_name='bedrock-runtime',
     region_name=os.getenv('AWS_REGION', 'us-east-1')
 )
 
+
+# --- CDT Reference Data ---
+
+def load_cdt_reference():
+    """Load CDT codes from mock JSON at startup."""
+    cdt_path = Path(__file__).parent / "data" / "cdt_mock.json"
+    with open(cdt_path) as f:
+        data = json.load(f)
+    # Build a lookup dict keyed by code
+    return {entry["code"]: entry for entry in data["codes"]}
+
+CDT_CODES = load_cdt_reference()
+
+
+def match_cdt_codes(ai_suggestions):
+    """Cross-reference AI suggestions against the CDT dataset.
+    Enriches each suggestion with validated fees, denial risks, and a match flag."""
+    for suggestion in ai_suggestions:
+        code = suggestion.get("code", "")
+        ref = CDT_CODES.get(code)
+        if ref:
+            suggestion["verified"] = True
+            suggestion["reference_fee"] = ref["typical_fee"]
+            suggestion["denial_risk_factors"] = ref["denial_risk_factors"]
+            suggestion["category"] = ref["category"]
+        else:
+            suggestion["verified"] = False
+            suggestion["reference_fee"] = None
+            suggestion["denial_risk_factors"] = ["Code not found in CDT reference — verify manually"]
+            suggestion["category"] = "Unknown"
+    return ai_suggestions
+
+
+def build_cdt_reference_block():
+    """Format CDT codes as text for injection into the system prompt."""
+    lines = ["Available CDT codes (use ONLY these codes):"]
+    for code, entry in CDT_CODES.items():
+        lines.append(
+            f"  {code} | {entry['category']} | {entry['description']} | typical fee: ${entry['typical_fee']}"
+        )
+    return "\n".join(lines)
+
+
 class ClinicalNote(BaseModel):
     text: str
+
 
 @app.post("/api/analyze-note")
 async def analyze_clinical_note(note: ClinicalNote):
     try:
-        # The prompt that turns Claude into a master dental biller
-        system_prompt = """
-        You are an expert dental billing specialist for endodontics. 
-        Analyze the following clinical note and extract the exact CDT (Current Dental Terminology) codes.
-        Respond ONLY in valid JSON format with the following structure:
-        {
-            "suggested_codes": [{"code": "D3330", "description": "Root canal - molar", "fee_estimate": 1200}],
-            "total_estimated_value": 1200,
-            "denial_risks": ["Mention any missing information that might cause insurance to deny this claim"],
-            "status": "Ready to File" // or "Missing Info"
-        }
-        """
+        # Mocking the PII scrubber for the MVP narrative
+        print("SIMULATED STEP: Scrubbing PII (Names, DOBs) using Presidio-Analyzer before sending to LLM...")
 
-        # Construct the payload for Claude 3 on AWS Bedrock
+        cdt_reference = build_cdt_reference_block()
+
+        system_prompt = f"""You are an expert dental billing specialist for endodontics.
+Analyze the following clinical note and extract the exact CDT codes that apply.
+
+{cdt_reference}
+
+For each code you suggest, provide:
+- A confidence_score (0-100) based on how clearly the clinical note supports it
+- Step-by-step reasoning explaining why the code applies
+- Any denial risk factors specific to this case
+
+Respond ONLY in valid JSON with this structure:
+{{
+    "suggested_codes": [
+        {{
+            "code": "D3330",
+            "description": "Root canal - molar",
+            "fee_estimate": 950,
+            "confidence_score": 95,
+            "reasoning": "Step-by-step explanation of why this code was chosen."
+        }}
+    ],
+    "total_estimated_value": 950,
+    "denial_risks": ["List any missing info that could trigger a denial"],
+    "status": "Ready to File"
+}}
+
+Set status to "Clarification Needed" if any confidence_score is below 85."""
+
         body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
+            "max_tokens": 1500,
             "system": system_prompt,
             "messages": [
                 {
@@ -59,9 +121,9 @@ async def analyze_clinical_note(note: ClinicalNote):
             ]
         })
 
-        # Make the call to Claude (Replace the modelId with the exact Claude version you have access to, e.g., claude-3-haiku or sonnet)
+        # Calling Claude on Bedrock
         response = bedrock_runtime.invoke_model(
-            modelId='anthropic.claude-3-haiku-20240307-v1:0', 
+            modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
             contentType='application/json',
             accept='application/json',
             body=body
@@ -69,12 +131,24 @@ async def analyze_clinical_note(note: ClinicalNote):
 
         response_body = json.loads(response.get('body').read())
         ai_response_text = response_body['content'][0]['text']
-        
-        # Parse the JSON string returned by Claude into a Python dictionary
-        return json.loads(ai_response_text)
+
+        # Strip markdown code fences if Claude wraps the JSON in ```json ... ```
+        cleaned = ai_response_text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1]
+            cleaned = cleaned.rsplit("```", 1)[0]
+
+        result = json.loads(cleaned)
+
+        # Cross-reference AI output against CDT dataset
+        result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []))
+
+        return result
 
     except Exception as e:
+        print(f"AWS Bedrock Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 def health_check():
