@@ -14,7 +14,7 @@
       "category": "Diagnostic Imaging",
       "description": "Intraoral – periapical first radiographic image",
       "typical_fee": 45,
-      "denial_risk_factors": ["exceeds frequency limits per payer"]
+      "denial_risk_factors": ["exceeds frequency limits per insurance company"]
     },
     {
       "code": "D0364",
@@ -84,7 +84,7 @@
       "category": "Adjunctive",
       "description": "Surgical procedure for isolation of tooth with rubber dam",
       "typical_fee": 35,
-      "denial_risk_factors": ["bundled with some RCT codes per payer"]
+      "denial_risk_factors": ["bundled with some RCT codes per insurance company"]
     },
     {
       "code": "D2950",

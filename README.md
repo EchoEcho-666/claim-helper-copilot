@@ -42,19 +42,19 @@ The practice of billing a dental procedure to **medical** insurance using CPT + 
 
 ### Medical Necessity
 
-The clinical justification that a procedure was **essential**, not elective or cosmetic. Insurance payers require specific clinical language in the documentation — exact measurements, radiographic findings, quantified structural loss. Vague notes like "patient had pain, did crown" get denied.
+The clinical justification that a procedure was **essential**, not elective or cosmetic. Insurance companies require specific clinical language in the documentation — exact measurements, radiographic findings, quantified structural loss. Vague notes like "patient had pain, did crown" get denied.
 
 ### Common Denial Codes
 
 | Code | Name | What It Means |
 |------|------|---------------|
 | **CO-50** | Medical Necessity | The clinical note does not justify why the procedure was needed. Most common denial reason. |
-| **CO-11** | Diagnosis/Procedure Mismatch | The ICD-10 diagnosis does not logically support the intensity of the procedure performed. Payers use this to downcode expensive procedures to cheaper ones. |
+| **CO-11** | Diagnosis/Procedure Mismatch | The ICD-10 diagnosis does not logically support the intensity of the procedure performed. Insurance companies use this to downcode expensive procedures to cheaper ones. |
 | **CO-16** | Missing Information | The claim lacks required attachments, narratives, or clinical details. Triggers automatic human audit for unlisted procedure codes. |
 
 ### Predictive Adjudication
 
-Traditional billing is **reactive** — submit a claim, wait 30 days, find out it was denied, then scramble to appeal. Claim Copilot performs **predictive adjudication**: it simulates how a payer's algorithm would evaluate the claim and flags risks *before* submission, while there is still time to fix the documentation.
+Traditional billing is **reactive** — submit a claim, wait 30 days, find out it was denied, then scramble to appeal. Claim Copilot performs **predictive adjudication**: it simulates how an insurance company's algorithm would evaluate the claim and flags risks *before* submission, while there is still time to fix the documentation.
 
 ### Confidence Scoring
 
@@ -99,7 +99,7 @@ Before sending clinical text to the AI model, personally identifiable informatio
 
 - **Reference Fee Comparison** — When the AI's fee estimate differs from the CDT dataset's typical fee, both values are shown side-by-side so the biller can spot discrepancies.
 
-- **Per-Code Denial Risk Factors** — Pulled from the CDT dataset (not AI-generated), these flag known reasons payers deny specific codes (e.g., "missing pre-op radiograph" for root canal codes).
+- **Per-Code Denial Risk Factors** — Pulled from the CDT dataset (not AI-generated), these flag known reasons insurance companies deny specific codes (e.g., "missing pre-op radiograph" for root canal codes).
 
 - **Expandable AI Reasoning** — Each code has a collapsible "AI Reasoning" section explaining step-by-step why the code was selected, giving the biller transparency into the AI's logic.
 
@@ -114,7 +114,7 @@ This prototype uses a **minimal mock dataset** (`backend/data/cdt_mock.json`) co
 **Production deployment requires:**
 - ADA CDT Commercial License: https://www.ada.org/publications/cdt/licensing
 - Integration with licensed CDT API or database
-- Payer-specific fee schedule and policy rules engine
+- Insurance company-specific fee schedule and policy rules engine
 
 This approach demonstrates:
 - Privacy-first architecture (simulated PII scrubbing, stateless design)
@@ -185,7 +185,7 @@ This approach demonstrates:
 ## Roadmap (Next from Blueprint)
 
 - [ ] **Gold Standard system prompt** — cross-coding (CDT + CPT + ICD-10), predictive adjudication (CO-50/CO-11/CO-16), autonomous medical necessity narrative generation
-- [ ] **Payer selection** — dropdown for insurance carrier (Delta Dental, Aetna, etc.) to enable payer-specific denial prediction
+- [ ] **Insurance company selection** — dropdown for insurance carrier (Delta Dental, Aetna, etc.) to enable carrier-specific denial prediction
 - [ ] **Medical necessity narrative output** — auto-generated clinical narrative attachable to claim forms
-- [ ] **RAG pipeline** — vector database loaded with payer policy manuals for grounded adjudication
+- [ ] **RAG pipeline** — vector database loaded with insurance company policy manuals for grounded adjudication
 - [ ] **Agentic tool use** — deterministic validation functions (e.g., `verify_ICD10_compatibility`)

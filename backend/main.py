@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-app = FastAPI(title="TDO Claim Copilot API")
+app = FastAPI(title="Claim Helper API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,9 +40,13 @@ def load_cdt_reference():
 CDT_CODES = load_cdt_reference()
 
 
-def match_cdt_codes(ai_suggestions):
+def match_cdt_codes(ai_suggestions, clinical_text):
     """Cross-reference AI suggestions against the CDT dataset.
-    Enriches each suggestion with validated fees, denial risks, and a match flag."""
+    Enriches each suggestion with validated fees, denial risks, and a match flag.
+    Adjusts confidence down when denial risk factors are present that the note
+    does not clearly address."""
+    clinical_lower = clinical_text.lower()
+
     for suggestion in ai_suggestions:
         code = suggestion.get("code", "")
         ref = CDT_CODES.get(code)
@@ -51,11 +55,24 @@ def match_cdt_codes(ai_suggestions):
             suggestion["reference_fee"] = ref["typical_fee"]
             suggestion["denial_risk_factors"] = ref["denial_risk_factors"]
             suggestion["category"] = ref["category"]
+
+            # Penalize confidence for each unaddressed denial risk factor
+            score = suggestion.get("confidence_score", 90)
+            for risk in ref["denial_risk_factors"]:
+                risk_keywords = risk.lower().split()
+                # Check if the clinical note addresses this risk
+                addressed = sum(1 for kw in risk_keywords if kw in clinical_lower)
+                if addressed < len(risk_keywords) * 0.4:
+                    score = max(score - 12, 30)
+            suggestion["confidence_score"] = score
         else:
             suggestion["verified"] = False
             suggestion["reference_fee"] = None
             suggestion["denial_risk_factors"] = ["Code not found in CDT reference — verify manually"]
             suggestion["category"] = "Unknown"
+            suggestion["confidence_score"] = max(
+                suggestion.get("confidence_score", 50) - 20, 20
+            )
     return ai_suggestions
 
 
@@ -87,8 +104,8 @@ Analyze the following clinical note and extract the exact CDT codes that apply.
 {cdt_reference}
 
 For each code you suggest, provide:
-- A confidence_score (0-100) based on how clearly the clinical note supports it
-- Step-by-step reasoning explaining why the code applies
+- A confidence_score (0-100) reflecting the likelihood this claim will be APPROVED by the insurance company. Factor in: whether the clinical note contains sufficient detail, whether medical necessity is clearly established, whether required documentation (radiographs, measurements, pre-authorization) is mentioned, and whether common insurance company denial triggers are addressed. Be conservative — only score above 90 if the documentation is truly bulletproof.
+- Step-by-step reasoning explaining why the code applies AND any documentation gaps
 - Any denial risk factors specific to this case
 
 Respond ONLY in valid JSON with this structure:
@@ -141,7 +158,15 @@ Set status to "Clarification Needed" if any confidence_score is below 85."""
         result = json.loads(cleaned)
 
         # Cross-reference AI output against CDT dataset
-        result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []))
+        result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []), note.text)
+
+        # Recalculate status based on adjusted confidence scores
+        min_confidence = min(
+            (c.get("confidence_score", 100) for c in result["suggested_codes"]),
+            default=100
+        )
+        if min_confidence < 85:
+            result["status"] = "Clarification Needed"
 
         return result
 
