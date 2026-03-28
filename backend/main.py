@@ -40,6 +40,18 @@ def load_cdt_reference():
 CDT_CODES = load_cdt_reference()
 
 
+# Words to filter when matching risk factors — these describe the absence/policy,
+# not clinical evidence terms we'd find in a well-documented note
+_RISK_FILTER_WORDS = frozenset({
+    'missing', 'requires', 'required', 'not', 'no', 'lacks', 'without',
+    'exceeds', 'often', 'needed', 'if', 'may', 'can', 'done', 'same',
+    'day', 'first', 'per', 'some', 'for', 'with', 'the', 'a', 'an',
+    'and', 'or', 'of', 'in', 'on', 'to', 'is',
+    'insurance', 'company', 'payable', 'bundled', 'limits', 'frequency',
+    'pre-authorization', 'pre-auth', 'authorization',
+})
+
+
 def match_cdt_codes(ai_suggestions, clinical_text):
     """Cross-reference AI suggestions against the CDT dataset.
     Enriches each suggestion with validated fees, denial risks, and a match flag.
@@ -59,11 +71,14 @@ def match_cdt_codes(ai_suggestions, clinical_text):
             # Penalize confidence for each unaddressed denial risk factor
             score = suggestion.get("confidence_score", 90)
             for risk in ref["denial_risk_factors"]:
-                risk_keywords = risk.lower().split()
-                # Check if the clinical note addresses this risk
+                # Extract only clinical evidence terms, ignoring qualifiers
+                risk_keywords = [w for w in risk.lower().split()
+                                 if w not in _RISK_FILTER_WORDS and len(w) > 2]
+                if not risk_keywords:
+                    continue
                 addressed = sum(1 for kw in risk_keywords if kw in clinical_lower)
-                if addressed < len(risk_keywords) * 0.4:
-                    score = max(score - 12, 30)
+                if addressed < max(len(risk_keywords) * 0.5, 1):
+                    score = max(score - 8, 45)
             suggestion["confidence_score"] = score
         else:
             suggestion["verified"] = False
@@ -102,7 +117,7 @@ async def analyze_clinical_note(request: ClaimRequest):
 You have master-level expertise in US dental and medical billing: ADA CDT coding, AMA CPT coding,
 WHO ICD-10-CM diagnostic coding, and commercial insurance adjudication algorithms.
 
-The patient's insurance company is: {{insurance_company}}
+The patient's insurance company is: {request.insurance_company}
 
 {cdt_reference}
 
@@ -114,49 +129,72 @@ For each code, estimate the fee based on the reference data.
 
 STEP 2: Cross-Coding (Medical Codes)
 If the procedure has medical implications (surgery, trauma, pathology, complex diagnosis),
-identify the corresponding CPT and ICD-10-CM codes that would be needed to bill medical insurance.
+identify the corresponding CPT and ICD-10-CM codes needed to bill medical insurance.
 Return empty lists if cross-coding does not apply.
 
-STEP 3: Predictive Denial Risk Analysis
-Act as an adversarial insurance company algorithm. Try to find reasons to deny this claim:
-- CO-50 (Medical Necessity): Does the note fail to justify why the procedure was essential?
-- CO-11 (Code Mismatch): Is there a logical gap between the diagnosis and the procedure?
-- CO-16 (Missing Info): Is required documentation missing (radiographs, measurements, tooth numbers)?
-Set adjudication_status to "HIGH_DENIAL_RISK" if any serious risk is found, otherwise "APPROVED".
+STEP 3: Risk Assessment
+Evaluate the claim against insurance adjudication criteria for {request.insurance_company}.
+Give an accurate, balanced assessment — predict the REAL outcome, not the worst case.
+
+Apply denial codes ONLY when clearly warranted:
+- CO-50 (Lack of Medical Necessity): The note fundamentally fails to justify why the procedure
+  was clinically necessary — missing specific diagnosis, severity indicators, objective findings,
+  or rationale for why conservative alternatives were insufficient.
+  Do NOT flag CO-50 if the note documents clear pathology, symptoms, clinical findings, and
+  radiographic evidence supporting the procedure.
+- CO-11 (Diagnosis/Procedure Mismatch): There is a genuine logical disconnect between the
+  documented condition and the procedure performed (e.g., billing surgical extraction but
+  documenting only a simple extraction).
+  Do NOT flag CO-11 for minor documentation gaps.
+- CO-16 (Missing Information for Unlisted Code): Flag ONLY when an unlisted/by-report procedure
+  code (e.g., CPT 41899) is used without detailed justification, OR when truly critical required
+  information is completely absent (no tooth number at all, no procedure description at all).
+  General documentation improvements do NOT warrant CO-16.
+
+adjudication_status:
+- "APPROVED" — Documentation adequately supports the procedures. Use this for well-documented
+  notes with clear pathology, clinical findings, and procedure details — even if minor
+  improvements could be made. This is the expected result for thorough clinical documentation.
+- "HIGH_DENIAL_RISK" — Documentation has a significant, specific deficiency likely to trigger
+  an automated denial. Reserve for genuinely problematic claims where key evidence is absent.
+
+denial_risk_code: The most relevant code if HIGH_DENIAL_RISK, otherwise null.
 
 STEP 4: Medical Necessity Narrative
-If the claim is viable but needs a narrative to survive insurance scrutiny, generate a concise,
-clinical medical necessity statement. Use specific clinical data from the note (probing depths,
-percentages, radiographic findings). Match the tone of a specialist writing to a peer medical director.
-Return null if no narrative is needed.
+ALWAYS generate a medical_necessity_narrative — never return null for this field.
+- For APPROVED claims: Write a strong clinical narrative reinforcing medical necessity using
+  specific data from the note. This will be proactively attached to the claim as defense.
+- For HIGH_DENIAL_RISK claims: Write the best possible narrative using available data, and
+  note what additional documentation the provider should supply.
+Use the tone of a specialist writing to a peer medical director. Be concise and clinical.
 
 STEP 5: Confidence Scoring
-Score each code 0-100 on likelihood of insurance approval. Factor in documentation completeness,
-medical necessity language, and common denial triggers. Be conservative — only score above 90
-if the documentation is truly bulletproof for {request.insurance_company}.
+Score each code 0-100 on likelihood of insurance approval for {request.insurance_company}.
+Be conservative — only score above 90 for truly bulletproof documentation.
+But also be fair — well-documented procedures with clear clinical justification should score 75-90.
 
 OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
-{{{{
+{{
     "adjudication_status": "APPROVED or HIGH_DENIAL_RISK",
     "denial_risk_code": null or "CO-50" or "CO-11" or "CO-16",
     "suggested_codes": [
-        {{{{
+        {{
             "code": "D3330",
             "description": "Root canal - molar",
             "fee_estimate": 950,
             "confidence_score": 85,
             "reasoning": "Step-by-step explanation"
-        }}}}
+        }}
     ],
-    "cross_codes": {{{{
+    "cross_codes": {{
         "CPT": [],
         "ICD_10": []
-    }}}},
+    }},
     "total_estimated_value": 950,
-    "denial_risks": ["specific risks found"],
-    "medical_necessity_narrative": "clinical narrative or null",
+    "denial_risks": ["list specific risks, or empty list if none"],
+    "medical_necessity_narrative": "Always provide a clinical narrative here — never null",
     "status": "Ready to File or Clarification Needed"
-}}}}"""
+}}"""
 
         user_input = json.dumps({
             "insurance_company": request.insurance_company,
@@ -196,12 +234,17 @@ OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
         # Cross-reference AI output against CDT dataset
         result["suggested_codes"] = match_cdt_codes(result.get("suggested_codes", []), request.text)
 
+        # Sort codes by confidence (highest first)
+        result["suggested_codes"].sort(
+            key=lambda c: c.get("confidence_score", 0), reverse=True
+        )
+
         # Recalculate status based on adjusted confidence scores
         min_confidence = min(
             (c.get("confidence_score", 100) for c in result["suggested_codes"]),
             default=100
         )
-        if min_confidence < 85:
+        if min_confidence < 70:
             result["status"] = "Clarification Needed"
         if result.get("adjudication_status") == "HIGH_DENIAL_RISK":
             result["status"] = "Clarification Needed"

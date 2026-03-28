@@ -135,7 +135,7 @@ function App() {
       {/* ---- Header ---- */}
       <header className="app-header">
         <h1 className="header-logo-text">Claim Helper<span className="red-dot">.</span></h1>
-        <div className="header-tagline">AI-Powered Dental Insurance Claim Analysis</div>
+        <div className="header-tagline">AI-Powered Dental Insurance Claim Intelligence</div>
       </header>
 
       {/* ---- Main Content ---- */}
