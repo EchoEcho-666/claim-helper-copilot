@@ -48,6 +48,7 @@ function App() {
   const [error, setError] = useState(null);
   const [loadingStep, setLoadingStep] = useState(0);
   const [expandedReasoning, setExpandedReasoning] = useState({});
+  const [showFilingModal, setShowFilingModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const loadingInterval = useRef(null);
 
@@ -125,8 +126,17 @@ function App() {
     }
   };
 
-  const isReady = result?.status === 'Ready to File';
-  const isApproved = isReady;
+  // Determine risk tier from average confidence across all codes
+  const avgConfidence = result?.suggested_codes?.length
+    ? result.suggested_codes.reduce((sum, c) => sum + (c.confidence_score ?? 0), 0)
+      / result.suggested_codes.length
+    : 0;
+  const riskTier = !result ? null
+    : result.adjudication_status === 'HIGH_DENIAL_RISK' ? 'high-risk'
+    : avgConfidence < 60 ? 'high-risk'
+    : avgConfidence >= 85 ? 'ready'
+    : 'moderate';
+  const isReady = riskTier === 'ready';
   const hasCrossCodes = result?.cross_codes &&
     ((result.cross_codes.CPT?.length > 0) || (result.cross_codes.ICD_10?.length > 0));
 
@@ -200,10 +210,15 @@ function App() {
           {/* ---- Right: Output ---- */}
           <div className="card">
             <div className="card-header">
-              <h3>AI Billing Output</h3>
+              <h3>AI Claim Review</h3>
               {result && (
-                <span className={`status-badge ${isReady ? 'ready' : 'clarification'}`}>
-                  {result.status}
+                <span
+                  className={`status-badge ${riskTier === 'ready' ? 'ready bounce' : riskTier === 'moderate' ? 'clarification' : 'denial'}`}
+                  title={isReady ? 'Coming soon: one-click filing to insurance companies' : undefined}
+                >
+                  {riskTier === 'ready' ? 'Ready to File'
+                    : riskTier === 'moderate' ? 'Review Suggested'
+                    : 'High Risk'}
                 </span>
               )}
             </div>
@@ -250,8 +265,12 @@ function App() {
               {result && !loading && (
                 <div>
                   {/* Adjudication banner */}
-                  <div className={`adjudication-banner ${isApproved ? 'approved' : 'high-risk'}`}>
-                    <span>{isApproved ? 'Likely Approved' : 'High Denial Risk'}</span>
+                  <div className={`adjudication-banner ${riskTier}`}>
+                    <span>
+                      {riskTier === 'ready' ? 'Ready to File'
+                        : riskTier === 'moderate' ? 'Moderate Risk — Review Suggested'
+                        : 'High Denial Risk'}
+                    </span>
                     {result.denial_risk_code && (
                       <span className="denial-code-badge">{result.denial_risk_code}</span>
                     )}
@@ -382,6 +401,48 @@ function App() {
                           <li key={i}>{risk}</li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+
+                  {/* File Claim button */}
+                  <button
+                    className={`file-claim-btn animate-in ${isReady ? 'active' : ''}`}
+                    disabled={!isReady}
+                    onClick={() => isReady && setShowFilingModal(true)}
+                    title={!isReady ? 'Resolve flagged issues before filing' : undefined}
+                  >
+                    {isReady ? 'Ready to File Claim' : 'Not Ready to File'}
+                  </button>
+
+                  {/* Filing modal */}
+                  {showFilingModal && (
+                    <div className="modal-overlay" onClick={() => setShowFilingModal(false)}>
+                      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-icon">&#9889;</div>
+                        <h3 className="modal-title">Auto-Filing Coming Soon</h3>
+                        <p className="modal-text">
+                          We're building direct integration with insurance carriers to let you
+                          file claims in one click — no clearinghouse, no portal logins,
+                          no manual data entry.
+                        </p>
+                        <div className="modal-roadmap">
+                          <div className="roadmap-item done">
+                            <span className="roadmap-dot" />AI Claim Review &amp; Coding
+                          </div>
+                          <div className="roadmap-item done">
+                            <span className="roadmap-dot" />Medical Necessity Narrative
+                          </div>
+                          <div className="roadmap-item next">
+                            <span className="roadmap-dot" />One-Click Filing to Insurance
+                          </div>
+                          <div className="roadmap-item future">
+                            <span className="roadmap-dot" />Automated Denial Appeals
+                          </div>
+                        </div>
+                        <button className="modal-close-btn" onClick={() => setShowFilingModal(false)}>
+                          Got It
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
