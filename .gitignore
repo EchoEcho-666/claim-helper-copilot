@@ -10,5 +10,8 @@ venv/
 # Node
 node_modules/
 
+# Build output
+backend/static/
+
 # OS
 .DS_Store

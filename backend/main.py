@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -259,3 +261,17 @@ OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
 @app.get("/health")
 def health_check():
     return {"status": "Backend is running!"}
+
+
+# --- Serve React frontend in production ---
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=static_dir / "static"), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_react(full_path: str):
+        """Serve React app for all non-API routes."""
+        file_path = static_dir / full_path
+        if full_path and file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(static_dir / "index.html")
