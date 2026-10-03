@@ -1,6 +1,7 @@
-import boto3
 import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,16 +18,38 @@ app = FastAPI(title="Claim Helper API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Boto3 automatically uses the keys in your .env file
-bedrock_runtime = boto3.client(
-    service_name='bedrock-runtime',
-    region_name=os.getenv('AWS_REGION', 'us-east-1')
-)
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+
+
+def call_llm(system_prompt, user_input):
+    payload = json.dumps({
+        "model": OPENROUTER_MODEL,
+        "max_tokens": 2000,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input},
+        ],
+    }).encode()
+    req = urllib.request.Request(
+        OPENROUTER_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"OpenRouter {e.code}: {e.read().decode()}") from e
+    return data["choices"][0]["message"]["content"]
 
 
 # --- CDT Reference Data ---
@@ -203,27 +226,7 @@ OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
             "clinical_note": request.text
         })
 
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2000,
-            "system": system_prompt,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": user_input
-                }
-            ]
-        })
-
-        response = bedrock_runtime.invoke_model(
-            modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
-            contentType='application/json',
-            accept='application/json',
-            body=body
-        )
-
-        response_body = json.loads(response.get('body').read())
-        ai_response_text = response_body['content'][0]['text']
+        ai_response_text = call_llm(system_prompt, user_input)
 
         # Strip markdown code fences if present
         cleaned = ai_response_text.strip()
@@ -254,7 +257,7 @@ OUTPUT FORMAT — respond with ONLY this JSON, no markdown, no explanation:
         return result
 
     except Exception as e:
-        print(f"AWS Bedrock Error: {str(e)}")
+        print(f"LLM Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
